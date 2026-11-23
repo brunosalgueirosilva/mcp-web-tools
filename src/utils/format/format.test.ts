@@ -52,6 +52,48 @@ describe("formatExtractResponse", () => {
     expect(text).toContain("Response time: 500ms");
   });
 
+  it("keeps each page's extracted image URLs within that page's section", () => {
+    const text = formatExtractResponse({
+      results: [
+        {
+          url: "https://example.com/one",
+          content: "First page",
+          images: ["https://cdn.example.com/one.png", "https://cdn.example.com/diagram.svg?size=large&v=2"],
+        },
+        {
+          url: "https://example.com/two",
+          content: "Second page",
+          images: ["https://cdn.example.com/two.png"],
+        },
+      ],
+      failedResults: [],
+    });
+
+    const [firstPage, secondPage] = text.split("## https://example.com/two");
+    expect(firstPage).toContain("## https://example.com/one");
+    expect(firstPage).toContain("First page");
+    expect(firstPage).toContain("### Images\n- https://cdn.example.com/one.png");
+    expect(firstPage).toContain("https://cdn.example.com/diagram.svg?size=large&v=2");
+    expect(firstPage).not.toContain("https://cdn.example.com/two.png");
+    expect(secondPage).toContain("Second page");
+    expect(secondPage).toContain("### Images\n- https://cdn.example.com/two.png");
+    expect(secondPage).not.toContain("https://cdn.example.com/one.png");
+  });
+
+  it("omits the images section for absent or empty image lists", () => {
+    const text = formatExtractResponse({
+      results: [
+        { url: "https://example.com/one", content: "First page" },
+        { url: "https://example.com/two", content: "Second page", images: [] },
+      ],
+      failedResults: [],
+    });
+
+    expect(text).not.toContain("### Images");
+    expect(text).toContain("First page");
+    expect(text).toContain("Second page");
+  });
+
   it("shows failed results", () => {
     const response: ExtractResponse = {
       results: [{ url: "https://example.com/ok", content: "OK" }],

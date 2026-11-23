@@ -44,6 +44,13 @@ export function formatExtractResponse(response: ExtractResponse): string {
     parts.push("");
     parts.push(result.content);
     parts.push("");
+    if (result.images?.length) {
+      parts.push("### Images");
+      for (const image of result.images) {
+        parts.push(`- ${image}`);
+      }
+      parts.push("");
+    }
   }
 
   if (response.failedResults.length > 0) {

@@ -38,7 +38,7 @@ export class TavilySearchProvider implements SearchProvider, ExtractProvider {
         snippet: r.content,
         score: r.score,
       })),
-      responseTime: response.response_time,
+      responseTime: response.response_time == null ? undefined : response.response_time * 1000,
     };
   }
 
@@ -59,7 +59,7 @@ export class TavilySearchProvider implements SearchProvider, ExtractProvider {
         url: f.url,
         error: f.error,
       })),
-      responseTime: response.response_time,
+      responseTime: response.response_time == null ? undefined : response.response_time * 1000,
     };
   }
 
