@@ -79,11 +79,14 @@ client logs and conversations have separate retention policies. Entry limits
 are not byte limits.
 
 The reader accepts at most 20 URLs per call and the GitHub file reader rejects
-files over 512 KiB. There is no general HTTP-response/cache byte budget or
-default output truncation. MCP cancellation is not propagated upstream, and
-there is no overall multi-URL deadline. Firecrawl's per-fetch timeouts and
-retry-wait bounds are documented in the [tool reference](docs/tools.md#firecrawl-retry-bounds);
-they are not a comprehensive resource-isolation mechanism.
+files over 512 KiB. Each page returned by `web_read` is cut to
+`WEBTOOLS_MAX_CHARS` characters (default 20,000) **on output**. That bounds what
+reaches the model, not what this process holds: the provider's full response is
+still fetched and cached in memory first, and there is no HTTP-response or cache
+byte budget. MCP cancellation is not propagated upstream, and there is no overall
+multi-URL deadline. Firecrawl's per-fetch timeouts and retry-wait bounds are
+documented in the [tool reference](docs/tools.md#firecrawl-retry-bounds); they are
+not a comprehensive resource-isolation mechanism.
 
 For deployment-specific controls, use the upstream guidance linked in
 [self-hosting](docs/self-hosting.md). The upstream unauthenticated Firecrawl

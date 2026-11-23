@@ -63,6 +63,8 @@ const fixture = http.createServer(async (req, res) => {
       const count = (attempts.get(data.url) ?? 0) + 1;
       attempts.set(data.url, count);
       if (data.url.endsWith("/recover") && count === 1) return send(503, { error: "temporary fixture outage" });
+      // Oversized page, used to prove the truncation notice in the real binary.
+      if (data.url.endsWith("/long")) return send(200, { success: true, data: { markdown: "L".repeat(30_000) } });
       return send(200, { success: true, data: { markdown: "# Fixture page", metadata: { sourceURL: data.url } } });
     }
     if (url.pathname === "/tavily/search") {
@@ -73,10 +75,13 @@ const fixture = http.createServer(async (req, res) => {
       });
     }
     if (url.pathname === "/tavily/extract") {
+      // Mirror the real API's shape: with a query, passages joined by "[...]"
+      // (measured live 2026-11-23: ~2 KB vs ~71 KB for the page); without one, the page.
+      const content = data.query ? "Passage one.[...]Passage two.[...]Passage three." : "Page evidence";
       return send(200, {
         results: data.urls.map((url) => ({
           url,
-          raw_content: "Page evidence",
+          raw_content: content,
           images: ["https://example.com/image.png"],
         })),
         failed_results: [],
@@ -208,6 +213,10 @@ try {
   assert.equal((await call(session.client, "web_read", args)).isError, false);
   assert.match(text(await call(session.client, "web_read", args)), /Fixture page/);
   assert.equal(attempts.get(args.urls[0]), 2);
+  // The default 20,000-character limit is active in this real binary. This session
+  // reads through Firecrawl, whose fixture serves an oversized page for /long.
+  const truncated = text(await call(session.client, "web_read", { urls: ["https://example.com/long"] }));
+  assert.match(truncated, /\[truncated: showing 20000 of 30000 characters\]/);
   const tavily = await connect(origin, {
     WEBTOOLS_SEARCH_PROVIDER: "tavily",
     WEBTOOLS_EXTRACT_PROVIDER: "tavily",
@@ -218,6 +227,15 @@ try {
     text(await call(tavily.client, "web_read", { urls: ["https://example.com"], includeImages: true })),
     /image\.png/,
   );
+  // Relevance query: reaches the provider and returns passages rather than the page.
+  const focused = text(
+    await call(tavily.client, "web_read", { urls: ["https://example.com"], query: "free allowance" }),
+  );
+  assert.match(focused, /Passage one\.\[\.\.\.\]Passage two/);
+  const focusedRequest = requests.findLast((request) => request.path === "/tavily/extract");
+  assert.equal(focusedRequest.data.query, "free allowance");
+  assert.equal(focusedRequest.data.chunks_per_source, 3);
+  assert.ok(focused.length < 400, `focused read should be small, was ${focused.length} chars`);
   const disabled = await connect(origin, { WEBTOOLS_EXTRACT_PROVIDER: "none" });
   assert.ok(!(await disabled.client.listTools()).tools.some((tool) => tool.name === "web_read"));
   for (const [target, signal] of [

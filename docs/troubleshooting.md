@@ -80,10 +80,9 @@ dedicated hostname.
 - **Malformed success:** missing Markdown or an invalid success envelope is an
   extraction failure. A present but empty Markdown string is valid.
 
-`extractDepth` omitted or `"basic"` sends `onlyMainContent: false`, so navigation
-can appear. `"advanced"` enables Firecrawl's main-content option, but does not
-guarantee perfect cleanup. `includeImages` is only supported as an explicit image
-list with Tavily.
+Firecrawl always sends `onlyMainContent: true`, which removes navigation, headers
+and footers, but does not guarantee perfect cleanup. `extractDepth` has no effect
+on Firecrawl. `includeImages` and `query` are only supported with Tavily.
 
 ## Some URLs succeed and others fail
 
@@ -116,12 +115,21 @@ success and a successful search with zero results. Read section errors.
 A detected GitHub primary rate-limit error currently stops the whole call,
 even if another section succeeded.
 
-## The model overflows context or ignores tools
+## The model overflows context, or a page comes back cut short
 
 Start with 3 search results and one read URL. Ask for a search first, then choose
-a page. Select only the GitHub search kind you need. A single long page or a
-512 KiB repository file can still be too large: there is no package-wide output
-truncation or byte budget.
+a page. Select only the GitHub search kind you need.
+
+- **Output ends with `[truncated: showing N of M characters]`:** the page was
+  longer than `WEBTOOLS_MAX_CHARS` (default 20,000). The model knows content is
+  missing. Pass `query` so Tavily returns only the relevant passages, raise the
+  setting, or set it to `0` to remove the limit.
+- **The client itself cut the result** (for example Claude Code's "Output too
+  large… saved to" notice): that truncation is the client's, after ours. Coding
+  agents can read the saved file; chat UIs such as LM Studio and Open WebUI
+  cannot, so use `query` there.
+- **A 512 KiB repository file** from `github_read_file` is not subject to
+  `WEBTOOLS_MAX_CHARS`; it has its own size limit.
 
 Confirm tools are enabled in the client and inspect actual calls/results.
 An assistant's confident prose is not evidence it called the tool. The project

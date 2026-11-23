@@ -7,42 +7,32 @@ Use Node.js **≥22.13.0** and a client that launches MCP servers over **stdio**
 installation is required.
 
 Examples here are **illustrative configuration**, checked against the linked
-client documentation on 2026-11-20. They are not records of live client/model
+client documentation on 2026-11-23. They are not records of live client/model
 tests. Tool use depends on the selected model, client, permissions, and context
 window; no model compatibility or token-efficiency claim is implied.
 
-## Generic stdio recipe
+## Where this works well
 
-Configure your client with:
+The tools are the same everywhere; what differs is what the client can do with a
+long result.
 
-- Command: `npx`
-- Arguments: `["-y", "mcp-web-tools"]`
-- Environment: `WEBTOOLS_SEARCH_PROVIDER=tavily`, `TAVILY_API_KEY=<your key>`
+| Client kind | Examples | Fit |
+| --- | --- | --- |
+| Coding agents | Claude Code, OpenCode, Kilo Code, Cline | **Full workflow.** They have file tools, so a long page can be saved and searched. |
+| Chat UIs | LM Studio, Open WebUI | **Works for search and focused reads.** They have no file tools, so if they truncate a long result the rest is lost. Pass `query` to `web_read`. |
 
-The extraction provider defaults to Tavily when search uses Tavily. For other
-combinations, use the [configuration reference](configuration.md).
+If your client can't open a file, make the model use `query` on `web_read`: with
+it, Tavily returns only the relevant passages (about 2 KB instead of 71 KB on one
+tested page). The server also cuts each page at 20,000 characters and says so.
 
-`npx` obtains/runs the npm package and may access the registry on first use.
-For a reproducible published setup, select an available release and put its
-exact version after `mcp-web-tools@` in the arguments. Changes made after the
-latest release are not included in the published package until the next release.
+## Two configuration shapes
 
-The client starts the process and exchanges JSON-RPC on stdin/stdout. Launching
-the command in a terminal without an MCP client may appear to do nothing; there
-is no interactive prompt or web UI. Logs use stderr.
+Clients differ only in where the config file lives and which of two shapes it
+uses. Find your client in the table below and copy that shape.
 
-## LM Studio
+### Shape A: `mcpServers`
 
-[LM Studio's official MCP guide](https://lmstudio.ai/docs/app/mcp) documents MCP
-hosting from version 0.3.17, with local and remote servers supported from
-0.3.17 build 10. Use a current version with MCP support.
-
-1. Open the **Program** tab in the right-hand sidebar.
-2. Select **Install → Edit mcp.json**.
-3. Add this entry under the existing `mcpServers` object. The example below is
-   a complete file for a setup with no other servers.
-4. Replace the key placeholder locally and save. Check the server/tool status
-   in the app before asking the model to search.
+Used by Claude Code, Cline, and LM Studio. Complete file:
 
 ```json
 {
@@ -59,30 +49,16 @@ hosting from version 0.3.17, with local and remote servers supported from
 }
 ```
 
-LM Studio follows `mcp.json` notation. Do not paste a second top-level
-`mcpServers` object inside an existing one. Keep credential-bearing configuration
-private; this example deliberately uses a placeholder, not a secret.
+If the file already has an `mcpServers` object, add the `mcp-web-tools` entry
+inside it rather than pasting a second one.
 
-A local model does not make this workflow offline: the search/extraction APIs
-still receive queries and URLs. LM Studio's own guide also notes MCP context
-usage; read fewer pages at once when working with a small context window.
+### Shape B: `mcp.servers`
 
-## OpenCode V2
+Used by OpenCode V2 and Kilo Code. The server sits under `mcp` and uses
+`environment`. Complete file:
 
-Sources: [MCP servers](https://opencode.ai/docs/mcp-servers) and
-[configuration](https://opencode.ai/docs/config).
-
-Use `opencode.jsonc` in the project root, or
-`~/.config/opencode/opencode.jsonc` for a user-wide setup. The alternative project
-location `.opencode/opencode.jsonc` is also supported. `.opencode.json` is not
-the documented V2 project filename.
-
-Make `TAVILY_API_KEY` available to the OpenCode process through your environment.
-Merge this complete file shape with existing settings:
-
-```jsonc
+```json
 {
-  "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "servers": {
       "mcp-web-tools": {
@@ -90,7 +66,7 @@ Merge this complete file shape with existing settings:
         "command": ["npx", "-y", "mcp-web-tools"],
         "environment": {
           "WEBTOOLS_SEARCH_PROVIDER": "tavily",
-          "TAVILY_API_KEY": "{env:TAVILY_API_KEY}"
+          "TAVILY_API_KEY": "REPLACE_WITH_YOUR_KEY"
         }
       }
     }
@@ -98,78 +74,111 @@ Merge this complete file shape with existing settings:
 }
 ```
 
-V2 nests named servers under **`mcp.servers`** and uses **`environment`** for
-local-server variables. `{env:TAVILY_API_KEY}` is OpenCode's interpolation
-syntax; `$TAVILY_API_KEY` inside JSON is just a literal string. An unset
-environment reference becomes empty and the Tavily configuration will fail.
+Both clients can substitute the key from your environment instead of storing it
+in the file; see the per-client notes below.
 
-OpenCode watches configuration and reloads MCP servers after a save. Run
-`opencode mcp list` or use `/mcps` to inspect the connection; `/reload` forces a
-full configuration reload if needed. No OpenCode restart is required just to
-apply a saved config change.
+### Where each client keeps its config
 
-OpenCode may prefix tool names with the server name or expose them through
-Code Mode. Look for the six [underlying tool names](tools.md), rather than
-assuming the client displays them without a namespace.
+| Client | Shape | Project scope | User scope |
+| --- | --- | --- | --- |
+| Claude Code | A | `.mcp.json` in the project root | `claude mcp add --scope user`, or `~/.claude.json` |
+| Cline | A | settings opened from **MCP Servers → Configure** | `~/.cline/data/settings/cline_mcp_settings.json` (CLI) |
+| LM Studio | A | — | **Program → Install → Edit mcp.json** |
+| OpenCode V2 | B | `opencode.jsonc` or `.opencode/opencode.jsonc` | `~/.config/opencode/opencode.jsonc` |
+| Kilo Code | B | `kilo.jsonc` or `.kilo/kilo.jsonc` | `~/.config/kilo/kilo.jsonc` |
 
-## Other clients
+Sources: [Claude Code](https://code.claude.com/docs/en/mcp),
+[Cline](https://docs.cline.bot/mcp/configuring-mcp-servers),
+[LM Studio](https://lmstudio.ai/docs/app/mcp),
+[OpenCode](https://opencode.ai/docs/mcp-servers),
+[Kilo Code](https://kilo.ai/docs/automate/mcp/using-in-kilo-code).
 
-For clients using `mcpServers`/`command`/`args`/`env`, the LM Studio example
-shows the process configuration. Follow your client's documentation for its
-configuration location and how to reconnect it. Do not copy OpenCode's
-`mcp.servers` shape into these clients.
+### Per-client notes
 
-If your client cannot find `npx` or `node`, inspect its launch environment.
-Desktop apps do not necessarily inherit the PATH or secrets of an interactive
-shell. Use an absolute executable path if needed. Avoid shell wrappers that
-print banners to stdout, which is reserved for MCP messages.
+**Claude Code.** A project `.mcp.json` asks for approval the first time you run
+`claude` in that folder. To register it without editing JSON:
+`claude mcp add mcp-web-tools --env TAVILY_API_KEY=… -- npx -y mcp-web-tools`.
+Claude Code may defer loading MCP tools behind a tool search; that is normal. It
+saves large tool results to disk and shows a preview, and the model can read the
+file.
 
-## Run this checkout
+**Cline.** Entries can also carry `"autoApprove": []` and `"disabled": false`.
+Open the file from the **MCP Servers → Configure** tab in the extension, or edit
+`cline_mcp_settings.json` directly when using the CLI.
 
-To run the source tree instead of a published npm version, run these from
-the repository root:
+**LM Studio.** The app follows `mcp.json` notation. A local model does not make
+this workflow offline: the search and extraction APIs still receive your queries
+and URLs. LM Studio's own guide notes MCP context usage, so prefer `query` on
+`web_read` with a small context window.
+
+**OpenCode V2.** Make `TAVILY_API_KEY` available to the OpenCode process and
+reference it as `{env:TAVILY_API_KEY}` in `environment`. Shell syntax like
+`$TAVILY_API_KEY` is not expanded inside JSON. An unset reference becomes empty
+and the Tavily configuration fails. OpenCode reloads MCP servers when the config
+file is saved; check with `opencode mcp list` or `/mcps`. `.opencode.json` is not
+the documented V2 project filename.
+
+**Kilo Code.** The same shape as OpenCode, in `kilo.json`/`kilo.jsonc`. You can
+add a server from the settings UI, which writes the file for you. Kilo notes that
+MCP tools add to context, so enable only the servers you need.
+
+### Getting the key into the config
+
+Prefer not to store the key in a file that might be committed:
+
+- **OpenCode:** `{env:TAVILY_API_KEY}` reads from the OpenCode process's environment.
+- **Claude Code:** `claude mcp add … --env` or `${TAVILY_API_KEY}` in `.mcp.json`.
+- **Cline, LM Studio, Kilo Code:** the documented shape stores the value in the
+  config file. Keep that file out of version control.
+
+## Pinning and running the source tree
+
+<a id="run-this-checkout"></a>
+
+`npx -y mcp-web-tools` runs the latest published release and may contact the
+registry on first use. For a reproducible setup, pin it: `mcp-web-tools@0.8.0`.
+
+To run a source checkout instead of a published release:
 
 ```sh
 npm ci
 npm run build
 ```
 
-Then configure the client to launch the compiled entry point. Illustrative
-`mcpServers` file; replace both filesystem paths and the key:
+Then launch the compiled entry point directly instead of via `npx`. In shape A,
+use this entry (replace both paths and the key):
 
 ```json
 {
-  "mcpServers": {
-    "mcp-web-tools": {
-      "command": "/absolute/path/to/node",
-      "args": ["/absolute/path/to/mcp-web-tools/build/index.js"],
-      "env": {
-        "WEBTOOLS_SEARCH_PROVIDER": "tavily",
-        "TAVILY_API_KEY": "tvly-REPLACE_WITH_YOUR_KEY"
-      }
+  "mcp-web-tools": {
+    "command": "/absolute/path/to/node",
+    "args": ["/absolute/path/to/mcp-web-tools/build/index.js"],
+    "env": {
+      "WEBTOOLS_SEARCH_PROVIDER": "tavily",
+      "TAVILY_API_KEY": "tvly-REPLACE_WITH_YOUR_KEY"
     }
   }
 }
 ```
 
-For OpenCode, replace its `command` array with
+In shape B, set `"command"` to
 `["/absolute/path/to/node", "/absolute/path/to/mcp-web-tools/build/index.js"]`
-and keep the `environment` object. Rebuild and reconnect this MCP process after
-source changes. [Contributor checks](../CONTRIBUTING.md) exercise local fixtures
-without provider keys.
+and keep the `environment` object. Rebuild and reconnect after source changes.
+The [contributor checks](../CONTRIBUTING.md) run without provider keys.
 
 ## Verify the connection and workflow
 
-First inspect the tool list. All six tools should be present; explicitly
+First inspect the tool list. All six [tools](tools.md) should be present;
 disabling extraction leaves five and omits only `web_read`. Tool discovery alone
 does not verify a provider key, upstream availability, or model tool use.
 
 For an optional live check, ask the assistant:
 
 > Search for official documentation on a topic I choose, with at most 3 results.
-> Read one selected source and answer with its URL. Tell me if either tool fails.
+> Read one source with `query` set to the specific fact you need, and answer with
+> its URL. Tell me if either tool fails.
 
 This is an **illustrative prompt**, not a recorded result. Running it sends data
-to providers and may consume credits. Review the tool calls, returned source
-URLs, and any per-URL failures rather than treating a fluent model answer as
-proof of success.
+to providers and may consume credits. Review the tool calls, the returned URLs,
+and any `[truncated …]` or `Failed:` notices rather than treating a fluent answer
+as proof of success.

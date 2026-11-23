@@ -47,6 +47,9 @@ export class TavilySearchProvider implements SearchProvider, ExtractProvider {
       urls: params.urls,
       extract_depth: params.extractDepth,
       include_images: params.includeImages,
+      // Only send chunking options together: Tavily applies chunks_per_source
+      // only when a query is present, and a query without it defaults to 3.
+      ...(params.query ? { query: params.query, chunks_per_source: 3 } : {}),
     });
 
     return {

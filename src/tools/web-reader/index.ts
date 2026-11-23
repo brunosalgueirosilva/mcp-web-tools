@@ -18,9 +18,17 @@ const webReaderSchema = {
     .enum(["basic", "advanced"])
     .optional()
     .describe(
-      "Tavily: basic costs 1 credit per 5 successful URLs, advanced costs 2. Firecrawl: advanced enables main-content filtering; basic/unset may retain boilerplate.",
+      "Tavily: basic costs 1 credit per 5 successful URLs, advanced costs 2. Firecrawl: no effect; main-content filtering is always on.",
     ),
   includeImages: z.boolean().optional().describe("Include extracted image URLs (default: false)"),
+  query: z
+    .string()
+    .trim()
+    .min(1)
+    .optional()
+    .describe(
+      "What you are looking for on the page. With Tavily, returns only the most relevant passages instead of the whole page, at no extra cost. Preferred for long pages or small context windows. Ignored by Firecrawl.",
+    ),
 };
 
 export function registerWebReaderTool(server: McpServer, config: ServerConfig, provider: ExtractProvider) {
@@ -32,10 +40,15 @@ export function registerWebReaderTool(server: McpServer, config: ServerConfig, p
       extractDepth: webReaderSchema.extractDepth.describe(
         provider.name === "tavily"
           ? "Tavily: basic (provider default) costs 1 credit per 5 successful URLs; advanced costs 2. Content quality depends on the page."
-          : "Firecrawl: advanced enables main-content filtering; basic/unset keeps boilerplate. Subject to provider quotas.",
+          : "Firecrawl: no effect. Main-content filtering is always on. Subject to provider quotas.",
       ),
       includeImages: webReaderSchema.includeImages.describe(
         provider.name === "tavily" ? "Include extracted image URLs (default: false)." : "Ignored by Firecrawl.",
+      ),
+      query: webReaderSchema.query.describe(
+        provider.name === "tavily"
+          ? "What you are looking for on the page. Returns only the most relevant passages instead of the whole page, at no extra cost. Preferred for long pages or small context windows."
+          : "Ignored by Firecrawl; the whole page is returned (subject to the length limit).",
       ),
     },
     async (params) => {
@@ -45,12 +58,13 @@ export function registerWebReaderTool(server: McpServer, config: ServerConfig, p
           urls: params.urls,
           extractDepth: params.extractDepth,
           includeImages: params.includeImages,
+          query: params.query,
         };
         const key = cacheKey("extract", extractParams);
         const cached = cacheGet<ExtractResponse>(key);
         if (cached) {
           log("cache hit: extract");
-          const text = formatExtractResponse(cached);
+          const text = formatExtractResponse(cached, config.maxChars);
           return { content: [{ type: "text" as const, text }] };
         }
 
@@ -60,7 +74,7 @@ export function registerWebReaderTool(server: McpServer, config: ServerConfig, p
         const complete = response.failedResults.length === 0 && response.results.length === params.urls.length;
         if (complete) cacheSet(key, response, config.cacheTtl);
 
-        const text = formatExtractResponse(response);
+        const text = formatExtractResponse(response, config.maxChars);
         const failed = response.results.length === 0;
         return {
           content: [

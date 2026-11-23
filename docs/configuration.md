@@ -23,6 +23,7 @@ reloads MCP servers when you save it.
 | `WEBTOOLS_CACHE_TTL` | `3600` | Seconds; `0` disables caching |
 | `WEBTOOLS_CACHE_MAX_ENTRIES` | `100` | Shared search/read cache entry limit; `0` disables caching |
 | `WEBTOOLS_CACHE_SWEEP_INTERVAL_MS` | `300000` | Milliseconds between expired-entry sweeps; `0` disables only the periodic sweep |
+| `WEBTOOLS_MAX_CHARS` | `20000` | Maximum characters of each page returned by `web_read`, cut at a paragraph boundary with a notice; `0` disables |
 | `WEBTOOLS_DEBUG` | Unset | Any nonempty value enables debug logs on stderr, including `"0"` or `"false"`; unset or empty disables |
 
 Numeric settings must be whole, nonnegative safe-integer strings, with the
@@ -74,8 +75,10 @@ capacity is 100 entries, not 100 URLs or a byte limit.
 - Successful searches are cached.
 - Only complete successful read responses are cached. Total and partial read
   failures are not cached.
-- A read cache entry covers the whole request, including URL order and options;
-  there is no per-URL cache.
+- A read cache entry covers the whole request, including URL order and options
+  (including `query`); there is no per-URL cache.
+- The cache stores the provider's full response. `WEBTOOLS_MAX_CHARS` is applied
+  when the result is returned, so changing it does not require a new fetch.
 - Retrying a partial batch can repeat successful work and consume more provider
   allowance. Resubmit only the failed URLs when possible.
 - Cached results retain their original provider-reported timing; it is not a

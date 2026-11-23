@@ -54,12 +54,15 @@ To run the latest source, [build from the checkout](docs/clients.md#run-this-che
 ## How it works
 
 1. Call `web_search` with a focused query and a small `maxResults`.
-2. Choose useful sources, then call `web_read` with their URLs.
+2. Choose useful sources, then call `web_read` with their URLs. Pass `query`
+   with what you want to find, and Tavily returns only the relevant passages
+   instead of the whole page, at no extra cost.
 3. Ask the assistant to cite those URLs and distinguish evidence from inference.
 
-For a smaller context window, start with 3 search results and read one page at a
-time. The server does not impose a general output/token budget; a long page can
-still fill the context. Model tool-use quality depends on the model and client.
+Each page is limited to 20,000 characters, cut at a paragraph boundary with a
+notice, so a long page cannot silently fill the context. See
+[tool contracts](docs/tools.md) for the `query` option and the length limit.
+Model tool-use quality depends on the model and client.
 
 ## Example Output
 

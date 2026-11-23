@@ -117,7 +117,10 @@ export class FirecrawlProvider implements ExtractProvider {
     const body = {
       url,
       formats: ["markdown"],
-      onlyMainContent: params.extractDepth === "advanced",
+      // Main-content filtering is a deterministic HTML pass (no LLM, no extra
+      // cost) that drops nav, headers and footers. It is on for every depth:
+      // boilerplate is never what the caller asked to read.
+      onlyMainContent: true,
     };
 
     let remainingWaitMs = RETRY_WAIT_BUDGET_MS;

@@ -92,4 +92,69 @@ describe("web_read through MCP", () => {
     expect((await connection.call("web_read", { urls: ["http://localhost:8080"] })).isError).not.toBe(true);
     expect(extract).toHaveBeenCalled();
   });
+
+  describe("relevance query", () => {
+    it("passes query to the provider and includes it in the cache key", async () => {
+      const params = { ...args, query: "  free monthly allowance  " };
+      await connection.call("web_read", params);
+      expect(extract).toHaveBeenLastCalledWith(expect.objectContaining({ query: "free monthly allowance" }));
+
+      // Same URLs without a query must not hit the query's cache entry.
+      await connection.call("web_read", args);
+      expect(extract).toHaveBeenCalledTimes(2);
+      expect(extract).toHaveBeenLastCalledWith(expect.objectContaining({ query: undefined }));
+
+      // The original query call is cached.
+      await connection.call("web_read", params);
+      expect(extract).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([{ query: "" }, { query: "   " }])("rejects blank query %j before calling the provider", async (extra) => {
+      expect((await connection.call("web_read", { ...args, ...extra })).isError).toBe(true);
+      expect(extract).not.toHaveBeenCalled();
+    });
+
+    it("describes query as Tavily-only when Tavily is active", async () => {
+      const tool = (await connection.client.listTools()).tools[0];
+      expect(JSON.stringify(tool.inputSchema)).toContain("relevant passages");
+    });
+  });
+
+  describe("character limit", () => {
+    // The shared test config sets maxChars: 0 so older assertions see full output.
+    // These tests opt into a real limit explicitly.
+    async function withLimit(maxChars: number) {
+      await connection.close();
+      connection = await openMcp((server) =>
+        registerWebReaderTool(server, testConfig({ maxChars }), { name: "tavily", extract }),
+      );
+    }
+
+    it("truncates a long page and says so", async () => {
+      await withLimit(20_000);
+      extract.mockResolvedValue({ ...success, results: [{ url: args.urls[0], content: "P".repeat(30_000) }] });
+      const text = toolText(await connection.call("web_read", args));
+      expect(text).toContain("[truncated: showing 20000 of 30000 characters]");
+    });
+
+    it("does not truncate when the limit is 0", async () => {
+      await withLimit(0);
+      extract.mockResolvedValue({ ...success, results: [{ url: args.urls[0], content: "F".repeat(30_000) }] });
+      const text = toolText(await connection.call("web_read", args));
+      expect(text).toContain("F".repeat(30_000));
+      expect(text).not.toContain("truncated");
+    });
+
+    it("keeps the full response in cache and applies the limit on output", async () => {
+      const content = "C".repeat(25_000);
+      extract.mockResolvedValue({ ...success, results: [{ url: args.urls[0], content }] });
+      await withLimit(20_000);
+      await connection.call("web_read", args); // caches full content, truncates at 20k
+
+      await withLimit(5_000);
+      const text = toolText(await connection.call("web_read", args));
+      expect(extract).toHaveBeenCalledTimes(1); // served from cache: no second provider call
+      expect(text).toContain("[truncated: showing 5000 of 25000 characters]");
+    });
+  });
 });

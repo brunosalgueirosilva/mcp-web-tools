@@ -57,6 +57,8 @@ export interface ServerConfig {
   cacheTtl: number;
   cacheMaxEntries: number;
   cacheSweepIntervalMs: number;
+  /** Max characters of each page returned by web_read; 0 disables truncation. */
+  maxChars: number;
   serverName: string;
   serverVersion: string;
 }
@@ -151,6 +153,8 @@ export function loadConfig(): ServerConfig {
     throw new Error("WEBTOOLS_CACHE_TTL exceeds the safe expiration timestamp range.");
   }
 
+  const maxChars = parseNonNegInt(process.env.WEBTOOLS_MAX_CHARS, 20_000, "WEBTOOLS_MAX_CHARS");
+
   return {
     searchProvider,
     tavilyApiKey,
@@ -164,6 +168,7 @@ export function loadConfig(): ServerConfig {
     cacheTtl,
     cacheMaxEntries,
     cacheSweepIntervalMs,
+    maxChars,
     serverName: "mcp-web-tools",
     serverVersion: getPackageVersion(),
   };

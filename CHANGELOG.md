@@ -4,6 +4,26 @@
 
 Nothing yet.
 
+## 0.9.0
+
+### Added
+
+- `web_read` accepts an optional **`query`**: what to find on the page. Tavily
+  then returns only the most relevant passages instead of the whole page, for the
+  same credit cost. On one documentation page this reduced the result from
+  71,433 to 2,149 characters. Ignored by Firecrawl, which has no such option.
+- **`WEBTOOLS_MAX_CHARS`** (default `20000`): each page returned by `web_read` is
+  cut at a paragraph boundary and ends with a notice such as
+  `[truncated: showing 20000 of 71433 characters]`, so the model knows content is
+  missing. `0` disables the limit. The full response stays in the cache.
+
+### Changed
+
+- **Firecrawl now always requests `onlyMainContent: true`**, a deterministic
+  filter that removes navigation, headers and footers. Previously only
+  `extractDepth: "advanced"` enabled it. `extractDepth` no longer affects
+  Firecrawl. This costs nothing extra and produces cleaner pages.
+
 ## 0.8.0
 
 ### Compatibility changes

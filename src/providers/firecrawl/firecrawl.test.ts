@@ -58,16 +58,27 @@ describe("FirecrawlProvider", () => {
     expect(AbortSignal.timeout).toHaveBeenCalledExactlyOnceWith(30_000);
   });
 
-  it.each([undefined, "basic", "advanced"] as const)("preserves %s extraction depth", async (extractDepth) => {
+  it.each([undefined, "basic", "advanced"] as const)(
+    "always requests main-content filtering regardless of %s depth, and never sends depth",
+    async (extractDepth) => {
+      mockSuccess();
+
+      await provider.extract({ urls: [URL], extractDepth });
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+      expect(body).toEqual({ url: URL, formats: ["markdown"], onlyMainContent: true });
+      expect(body).not.toHaveProperty("extractDepth");
+      expect(body).not.toHaveProperty("extract_depth");
+    },
+  );
+
+  it("ignores a relevance query: Firecrawl has no passage-ranking option", async () => {
     mockSuccess();
 
-    await provider.extract({ urls: [URL], extractDepth });
+    await provider.extract({ urls: [URL], query: "free allowance" });
 
-    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
-      url: URL,
-      formats: ["markdown"],
-      onlyMainContent: extractDepth === "advanced",
-    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+    expect(body).toEqual({ url: URL, formats: ["markdown"], onlyMainContent: true });
   });
 
   it("omits Authorization in keyless mode and accepts empty Markdown", async () => {

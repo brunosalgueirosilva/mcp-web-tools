@@ -85,6 +85,40 @@ describe("TavilySearchProvider", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("https://api.tavily.com/extract");
   });
 
+  it("sends query together with chunks_per_source so Tavily returns passages, not the page", async () => {
+    // Mirrors the shape measured live on 2026-11-23: ~2.1 KB of passages vs ~71 KB for the page.
+    mockResponse({
+      results: [
+        { url: "https://docs.example.com/credits", raw_content: "Passage one.[...]Passage two.[...]Passage three." },
+      ],
+      failed_results: [],
+      response_time: 0.11,
+    });
+
+    const result = await provider.extract({
+      urls: ["https://docs.example.com/credits"],
+      query: "monthly free allowance",
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      urls: ["https://docs.example.com/credits"],
+      query: "monthly free allowance",
+      chunks_per_source: 3,
+    });
+    expect(result.results[0]?.content).toContain("[...]");
+    expect(result.results[0]?.content).not.toContain("Failed");
+  });
+
+  it("never sends chunks_per_source without a query", async () => {
+    mockResponse({ results: [], failed_results: [] });
+
+    await provider.extract({ urls: ["https://example.com"] });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("chunks_per_source");
+    expect(body).not.toHaveProperty("query");
+  });
+
   it.each([
     { label: "omitted", seconds: undefined, milliseconds: undefined },
     { label: "null", seconds: null, milliseconds: undefined },

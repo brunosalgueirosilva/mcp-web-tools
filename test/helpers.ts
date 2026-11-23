@@ -14,6 +14,9 @@ export function testConfig(overrides: Partial<ServerConfig> = {}): ServerConfig 
     cacheTtl: 3600,
     cacheMaxEntries: 100,
     cacheSweepIntervalMs: 0,
+    // 0 = no truncation, so existing assertions see the provider's full output.
+    // The limit itself is tested explicitly in web-reader.test.ts.
+    maxChars: 0,
     serverName: "test",
     serverVersion: "1.0.0",
     ...overrides,

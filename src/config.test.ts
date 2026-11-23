@@ -109,6 +109,7 @@ describe("strict configuration validation", () => {
         "WEBTOOLS_CACHE_TTL",
         "WEBTOOLS_CACHE_MAX_ENTRIES",
         "WEBTOOLS_CACHE_SWEEP_INTERVAL_MS",
+        "WEBTOOLS_MAX_CHARS",
       ]) {
         process.env = { [name]: value };
         expect(() => loadConfig()).toThrow(name);
@@ -118,6 +119,13 @@ describe("strict configuration validation", () => {
   it("keeps zero-disable cache controls", () => {
     process.env = { WEBTOOLS_CACHE_TTL: "0", WEBTOOLS_CACHE_MAX_ENTRIES: "0", WEBTOOLS_CACHE_SWEEP_INTERVAL_MS: "0" };
     expect(loadConfig()).toMatchObject({ cacheTtl: 0, cacheMaxEntries: 0, cacheSweepIntervalMs: 0 });
+  });
+  it("defaults the page character limit to 20000 and accepts 0 to disable it", () => {
+    expect(loadConfig().maxChars).toBe(20_000);
+    process.env = { WEBTOOLS_MAX_CHARS: "0" };
+    expect(loadConfig().maxChars).toBe(0);
+    process.env = { WEBTOOLS_MAX_CHARS: "5000" };
+    expect(loadConfig().maxChars).toBe(5_000);
   });
   it.each(["0", "21"])("rejects out-of-range default max results %s", (value) => {
     process.env.WEBTOOLS_MAX_RESULTS = value;

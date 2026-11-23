@@ -5,7 +5,7 @@
 The six tool names below are unchanged. Results are MCP text content, generally
 Markdown, with `isError: true` for tool failures. A successful HTTP response from
 a provider does not necessarily mean every requested item succeeded.
-The package does not add a general output/token limit.
+`web_read` limits each page to `WEBTOOLS_MAX_CHARS` characters (default 20,000).
 
 All examples in this guide are **illustrative inputs**, not live-verified results.
 
@@ -54,16 +54,35 @@ Read selected URLs with Tavily Extract or Firecrawl Scrape. Not registered when
 | Parameter | Type | Default | Contract |
 | --- | --- | --- | --- |
 | `urls` | string[] | Required | 1–20 syntactically valid HTTP(S) URLs, without embedded credentials |
-| `extractDepth` | enum | Unset | `basic` or `advanced`; provider-specific meaning below |
+| `extractDepth` | enum | Unset | `basic` or `advanced`; Tavily only (see below) |
 | `includeImages` | boolean | `false` | Tavily image URLs, grouped under their source pages; ignored by Firecrawl |
+| `query` | string | Unset | What to find on the page. Tavily returns only the most relevant passages; ignored by Firecrawl |
 
 ```json
 {
   "urls": ["https://example.com/article"],
-  "extractDepth": "basic",
-  "includeImages": true
+  "query": "refund policy for annual plans"
 }
 ```
+
+### Use `query` for long pages
+
+Without `query`, `web_read` returns the whole page. With it, Tavily picks the
+passages most relevant to the query and returns those instead, for the **same
+credit cost**. On one documentation page, measured on 2026-11-23:
+
+| | Returned | Rough size |
+| --- | --- | --- |
+| No `query` | whole page | 71,433 characters (~18k tokens) |
+| `query` | 3 passages | 2,149 characters (~540 tokens) |
+
+Passages are joined by `[...]`. Tavily chooses them by relevance, so the fact you
+need may not be among them; call again without `query` if it is missing.
+
+Prefer `query` when the client has no file tools (chat UIs such as LM Studio or
+Open WebUI) or the model has a small context window. In a coding agent, a long
+page can also be saved to disk and searched, so `query` is a cost optimization
+rather than a necessity.
 
 ### Extraction differences
 
@@ -74,13 +93,30 @@ or every unwanted element will be removed. Requested image URLs returned by
 Tavily appear under their page's text; the server does not download image bytes.
 Provider response time is converted from seconds to milliseconds.
 
-**Firecrawl:** sends `POST /v2/scrape` with `formats: ["markdown"]`.
-Only `extractDepth: "advanced"` sets `onlyMainContent: true`.
-Omitted depth and `"basic"` explicitly set **`onlyMainContent: false`**; these
-results can contain navigation and boilerplate. This mapping is not Tavily's
-credit schedule and is not a request for LLM-based structured extraction.
-`includeImages` is ignored as a separate option, although returned Markdown may
-already contain image references.
+**Firecrawl:** sends `POST /v2/scrape` with `formats: ["markdown"]` and
+**`onlyMainContent: true`**, a deterministic HTML filter that removes navigation,
+headers and footers. It involves no LLM and costs nothing extra. `extractDepth`
+has no effect on Firecrawl, and `query` is ignored because Firecrawl has no
+passage-ranking option: the whole page is returned, subject to the length limit.
+This is not a request for LLM-based structured extraction. `includeImages` is
+ignored as a separate option, although returned Markdown may already contain
+image references.
+
+### Length limit
+
+Each page's content is cut to **`WEBTOOLS_MAX_CHARS` characters** (default
+`20,000`, about 5,000 tokens; `0` disables). The cut falls at the last paragraph
+break before the limit when there is one, and a notice is appended:
+
+```
+[truncated: showing 20000 of 71433 characters]
+```
+
+The notice tells the model that content is missing. Some clients also truncate
+large tool results, but silently and to a preview of their own choosing; this
+limit is applied first, so what the model sees ends with an honest marker. The
+cache stores the full response, so changing the setting takes effect without
+fetching again. The limit counts characters, not tokens, and applies per page.
 
 Firecrawl requests run in sequential batches of up to five concurrent URLs.
 The adapter requires a successful envelope containing a Markdown string; missing
@@ -220,11 +256,14 @@ not imply identical capabilities.
 | `topic=finance` | Forwarded | Maps to general | Not applicable |
 | `startDate`, `endDate` | Forwarded | Ignored | Not applicable |
 | `timeRange` | Forwarded | Forwarded; instance/engine support varies, including `week` | Not applicable |
-| `extractDepth=advanced` | Provider advanced extraction | Not applicable | Sets `onlyMainContent: true` |
+| `extractDepth=advanced` | Provider advanced extraction (2 credits per 5 URLs) | Not applicable | No effect |
+| `query` on reads | Returns up to 3 relevant passages instead of the page, same cost | Not applicable | Ignored |
 | `includeImages` on reads | Image URL list under each page | Not applicable | Ignored |
+| Boilerplate removal | Not guaranteed | Not applicable | Always on (`onlyMainContent: true`) |
 | `credit_balance` | When selected for search | Unsupported error | Not supported |
 
-Provider contracts checked 2026-11-20:
+Provider contracts checked 2026-11-20 (Tavily `query` chunking measured live
+2026-11-23):
 [Tavily Search](https://docs.tavily.com/api-reference/endpoint/search),
 [Tavily Extract](https://docs.tavily.com/api-reference/endpoint/extract),
 [SearXNG Search API](https://docs.searxng.org/dev/search_api.html), and
